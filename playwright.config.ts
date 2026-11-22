@@ -10,7 +10,8 @@ export default defineConfig({
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
   use: {
-    baseURL: process.env.WEB_ORIGIN ?? 'http://127.0.0.1:3100',
+    // Must match OIDC redirect host (localhost), not 127.0.0.1 — cookies are host-bound.
+    baseURL: process.env.WEB_ORIGIN ?? 'http://localhost:3100',
     trace: 'on-first-retry',
   },
   projects: [
@@ -23,7 +24,7 @@ export default defineConfig({
     ? undefined
     : {
         command: 'bash scripts/demo-serve.sh',
-        url: 'http://127.0.0.1:3100',
+        url: 'http://localhost:3100',
         reuseExistingServer: !process.env.CI,
         timeout: 180_000,
       },

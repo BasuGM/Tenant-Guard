@@ -4,19 +4,32 @@ Secure multi-tenant SaaS platform demonstrating OIDC + PKCE, refresh-token rotat
 
 See [docs/architecture.md](docs/architecture.md) for isolation invariants.
 
-## Quick start (API + web only)
+## Quick start (recommended)
+
+You need **more than the web app**. The dashboard proxies to the API; without API + IdP you get `ECONNREFUSED` on `/api/auth/me`.
 
 ```bash
 cp .env.example .env
-docker compose up -d postgres
 pnpm install
-pnpm db:migrate
-pnpm --filter @tenantguard/api dev
-pnpm --filter @tenantguard/web dev
+pnpm app
 ```
 
-- Web: http://localhost:3100
-- API health: http://localhost:3101/health
+That starts Docker infra, IdP, API, web, and worker.
+
+- Web: http://localhost:3100  
+- API health: http://localhost:3101/health  
+- Sign in: use IdP user `alice` (any password)
+
+### Manual (four terminals)
+
+```bash
+pnpm demo:up
+export $(grep -v '^#' .env | xargs)
+pnpm --filter @tenantguard/idp dev      # terminal 1 — start first
+pnpm --filter @tenantguard/api dev      # terminal 2
+pnpm --filter @tenantguard/web dev      # terminal 3
+pnpm --filter @tenantguard/worker dev   # terminal 4 (needed for exports)
+```
 
 ## Interview demo (full stack)
 
