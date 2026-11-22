@@ -2,7 +2,12 @@
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { api } from '@/lib/api';
+import { AppHeader } from '@/components/AppHeader';
+import { OrgPanel } from '@/components/OrgPanel';
+import { ProjectsPanel } from '@/components/ProjectsPanel';
+import { ExportsPanel } from '@/components/ExportsPanel';
 
 type Me = {
   user: { id: string; email: string | null; displayName: string | null } | null;
@@ -23,8 +28,20 @@ type ExportJob = {
   format: string;
 };
 
+type Tenant = {
+  tenant_id: string;
+  name: string;
+  slug: string;
+};
+
+function errorMessage(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return 'Something went wrong';
+}
+
 export default function DashboardPage() {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [projectName, setProjectName] = useState('Project Alpha');
   const [tenantName, setTenantName] = useState('Company A');
   const [tenantSlug, setTenantSlug] = useState('company-a');
@@ -36,10 +53,7 @@ export default function DashboardPage() {
 
   const tenants = useQuery({
     queryKey: ['tenants'],
-    queryFn: () =>
-      api<Array<{ tenant_id: string; name: string; slug: string }>>(
-        '/tenants',
-      ),
+    queryFn: () => api<Tenant[]>('/tenants'),
     enabled: !!me.data?.user,
   });
 
@@ -54,6 +68,13 @@ export default function DashboardPage() {
     queryFn: () => api<ExportJob[]>('/exports'),
     enabled:
       !!me.data?.tenantId && me.data.permissions.includes('exports:read'),
+    refetchInterval: (query) => {
+      const data = query.state.data;
+      if (!data) return false;
+      return data.some((j) => j.status === 'pending' || j.status === 'running')
+        ? 2000
+        : false;
+    },
   });
 
   const createTenant = useMutation({
@@ -68,6 +89,17 @@ export default function DashboardPage() {
       });
       return tenant;
     },
+    onSuccess: async () => {
+      await queryClient.invalidateQueries();
+    },
+  });
+
+  const switchTenant = useMutation({
+    mutationFn: (tenantId: string) =>
+      api('/auth/switch-tenant', {
+        method: 'POST',
+        body: JSON.stringify({ tenantId }),
+      }),
     onSuccess: async () => {
       await queryClient.invalidateQueries();
     },
@@ -98,147 +130,139 @@ export default function DashboardPage() {
     },
   });
 
+  const logout = useMutation({
+    mutationFn: () => api('/auth/logout', { method: 'POST' }),
+    onSuccess: () => {
+      queryClient.clear();
+      router.push('/');
+      router.refresh();
+    },
+  });
+
   const canCreateProject = me.data?.permissions.includes('projects:create');
   const canDeleteProject = me.data?.permissions.includes('projects:delete');
   const canExport = me.data?.permissions.includes('exports:create');
+  const canReadExports = me.data?.permissions.includes('exports:read');
+
+  const userLabel = me.data?.user
+    ? (me.data.user.email ??
+      me.data.user.displayName ??
+      me.data.user.id)
+    : null;
+
+  const activeOrgName =
+    me.data?.tenantId && tenants.data
+      ? (tenants.data.find((t) => t.tenant_id === me.data.tenantId)?.name ??
+        null)
+      : null;
 
   if (me.isLoading) {
     return (
-      <main>
-        <p className="muted">Loading session…</p>
-      </main>
+      <>
+        <AppHeader />
+        <div className="app-shell">
+          <div className="skeleton-block" aria-busy="true" aria-label="Loading session">
+            <div className="skeleton" />
+            <div className="skeleton" />
+            <div className="skeleton" />
+            <p className="muted">Loading session…</p>
+          </div>
+        </div>
+      </>
     );
   }
 
   if (!me.data?.user) {
     return (
-      <main>
-        <h1>Dashboard</h1>
-        <div className="card">
-          <p className="muted">Sign in to manage organizations and projects.</p>
-          <a className="button" href="/api/auth/login">
-            Sign in
-          </a>
+      <>
+        <AppHeader />
+        <div className="app-shell">
+          <div className="signed-out">
+            <h1>Dashboard</h1>
+            <div className="panel">
+              <p className="muted">
+                Sign in to manage organizations and projects.
+              </p>
+              <p style={{ marginTop: '1rem' }}>
+                <a className="button" href="/api/auth/login">
+                  Sign in
+                </a>
+              </p>
+            </div>
+          </div>
         </div>
-      </main>
+      </>
     );
   }
 
   return (
-    <main>
-      <div className="row">
-        <h1>Dashboard</h1>
-        <span className="badge">
-          {me.data.user.email ?? me.data.user.displayName ?? me.data.user.id}
-        </span>
-        <span className="badge">
-          roles: {me.data.systemRoles.join(', ') || 'none'}
-        </span>
-      </div>
-
-      <section className="card">
-        <h2>Organizations</h2>
-        <ul>
-          {(tenants.data ?? []).map((t) => (
-            <li key={t.tenant_id}>
-              {t.name} <span className="muted">({t.slug})</span>
-              {me.data.tenantId === t.tenant_id ? ' · active' : ''}
-            </li>
-          ))}
-        </ul>
-        <div className="row">
-          <input
-            value={tenantName}
-            onChange={(e) => setTenantName(e.target.value)}
-            placeholder="Organization name"
-          />
-          <input
-            value={tenantSlug}
-            onChange={(e) => setTenantSlug(e.target.value)}
-            placeholder="slug"
-          />
-          <button
-            onClick={() => createTenant.mutate()}
-            disabled={createTenant.isPending}
-          >
-            Create organization
-          </button>
+    <>
+      <AppHeader
+        userLabel={userLabel}
+        activeOrgName={activeOrgName}
+        roles={me.data.systemRoles}
+        onSignOut={() => logout.mutate()}
+        signingOut={logout.isPending}
+      />
+      <div className="app-shell">
+        <div className="app-title-row">
+          <h1>Dashboard</h1>
+          {userLabel ? <span className="badge">{userLabel}</span> : null}
+          <span className="badge">
+            roles: {me.data.systemRoles.join(', ') || 'none'}
+          </span>
         </div>
-      </section>
 
-      <section className="card">
-        <h2>Projects</h2>
-        {!me.data.tenantId ? (
-          <p className="muted">Create or join an organization first.</p>
-        ) : (
-          <>
-            <table>
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Description</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(projects.data ?? []).map((p) => (
-                  <tr key={p.id}>
-                    <td>{p.name}</td>
-                    <td className="muted">{p.description ?? '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            {canCreateProject ? (
-              <div className="row">
-                <input
-                  value={projectName}
-                  onChange={(e) => setProjectName(e.target.value)}
-                />
-                <button
-                  onClick={() => createProject.mutate()}
-                  disabled={createProject.isPending}
-                >
-                  Create project
-                </button>
-              </div>
-            ) : (
-              <p className="muted">Read-only project access for this role.</p>
-            )}
-            {!canDeleteProject && (
-              <p className="muted">Delete is hidden for your role.</p>
-            )}
-          </>
-        )}
-      </section>
+        <div className="dashboard-grid">
+          <OrgPanel
+            tenants={tenants.data ?? []}
+            activeTenantId={me.data.tenantId}
+            tenantName={tenantName}
+            tenantSlug={tenantSlug}
+            onTenantNameChange={setTenantName}
+            onTenantSlugChange={setTenantSlug}
+            onCreate={() => createTenant.mutate()}
+            onSwitch={(id) => switchTenant.mutate(id)}
+            creating={createTenant.isPending}
+            switching={switchTenant.isPending}
+            error={
+              createTenant.isError
+                ? errorMessage(createTenant.error)
+                : switchTenant.isError
+                  ? errorMessage(switchTenant.error)
+                  : null
+            }
+          />
 
-      <section className="card">
-        <h2>Exports</h2>
-        {canExport ? (
-          <button
-            onClick={() => createExport.mutate()}
-            disabled={createExport.isPending}
-          >
-            Request CSV export
-          </button>
-        ) : (
-          <p className="muted">Export permission required.</p>
-        )}
-        <ul>
-          {(exports.data ?? []).map((job) => (
-            <li key={job.id}>
-              {job.id.slice(0, 8)}… · {job.status} · {job.format}
-              {job.status === 'completed' ? (
-                <>
-                  {' '}
-                  <a href={`/api/exports/${job.id}/download`} target="_blank">
-                    Download
-                  </a>
-                </>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      </section>
-    </main>
+          <div className="dashboard-main">
+            <ProjectsPanel
+              hasTenant={!!me.data.tenantId}
+              projects={projects.data ?? []}
+              projectName={projectName}
+              onProjectNameChange={setProjectName}
+              onCreate={() => createProject.mutate()}
+              canCreate={!!canCreateProject}
+              canDelete={!!canDeleteProject}
+              creating={createProject.isPending}
+              error={
+                createProject.isError
+                  ? errorMessage(createProject.error)
+                  : null
+              }
+            />
+            <ExportsPanel
+              jobs={exports.data ?? []}
+              canExport={!!canExport}
+              canRead={!!canReadExports}
+              onRequest={() => createExport.mutate()}
+              requesting={createExport.isPending}
+              error={
+                createExport.isError ? errorMessage(createExport.error) : null
+              }
+            />
+          </div>
+        </div>
+      </div>
+    </>
   );
 }

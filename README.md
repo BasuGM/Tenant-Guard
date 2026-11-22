@@ -92,10 +92,11 @@ pnpm --filter @tenantguard/worker dev   # required for CSV exports
 
 ## What you can do in the UI
 
-1. **Sign in** via the local IdP (OIDC + PKCE).
-2. **Create organizations** (tenants) and switch the active one.
+1. **Sign in** via the local IdP (OIDC + PKCE) from the brand-first landing page.
+2. **Create organizations** (tenants) and click one to switch the active context.
 3. **Create projects** scoped to the active tenant.
 4. **Request a CSV export** — job goes pending → worker completes → download link.
+5. **Sign out** from the dashboard header.
 
 Under the hood you also get invitations/RBAC, audit-oriented permissions, rate limiting, and hashed API-key support from the M1–M9 roadmap.
 

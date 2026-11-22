@@ -1,10 +1,24 @@
 import type { Metadata } from 'next';
+import { Fraunces, Source_Sans_3 } from 'next/font/google';
 import { Providers } from './providers';
 import './globals.css';
 
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  variable: '--font-fraunces',
+  display: 'swap',
+});
+
+const sourceSans = Source_Sans_3({
+  subsets: ['latin'],
+  variable: '--font-source-sans',
+  display: 'swap',
+});
+
 export const metadata: Metadata = {
   title: 'TenantGuard',
-  description: 'Secure multi-tenant SaaS platform',
+  description:
+    'Multi-tenant SaaS with PostgreSQL Row-Level Security, OIDC sessions, and async exports',
 };
 
 export default function RootLayout({
@@ -13,7 +27,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
+    <html lang="en" className={`${fraunces.variable} ${sourceSans.variable}`}>
       <body>
         <Providers>{children}</Providers>
       </body>
