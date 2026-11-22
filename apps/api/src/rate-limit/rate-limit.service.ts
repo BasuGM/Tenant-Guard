@@ -52,7 +52,18 @@ export class RateLimitService implements OnModuleDestroy {
   }
 
   async onModuleDestroy(): Promise<void> {
-    await this.redis?.quit();
+    await this.disconnect();
+  }
+
+  async disconnect(): Promise<void> {
+    if (!this.redis) return;
+    try {
+      await this.redis.quit();
+    } catch {
+      this.redis.disconnect();
+    }
+    this.redis = null;
+    this.enabled = false;
   }
 
   async hit(

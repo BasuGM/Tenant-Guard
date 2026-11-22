@@ -17,23 +17,30 @@ export class OidcService implements OnModuleInit {
       return;
     }
 
-    try {
-      const issuer = await Issuer.discover(issuerUrl);
-      this.client = new issuer.Client({
-        client_id: process.env.OIDC_CLIENT_ID ?? 'tenantguard-web',
-        client_secret: process.env.OIDC_CLIENT_SECRET,
-        redirect_uris: [
-          process.env.OIDC_REDIRECT_URI ??
-            'http://localhost:3100/api/auth/callback',
-        ],
-        response_types: ['code'],
-      });
-      this.enabled = true;
-    } catch {
-      // Local boot without IdP is allowed until M3.
-      this.enabled = false;
-      this.client = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const issuer = await Issuer.discover(issuerUrl);
+        this.client = new issuer.Client({
+          client_id: process.env.OIDC_CLIENT_ID ?? 'tenantguard-web',
+          client_secret: process.env.OIDC_CLIENT_SECRET,
+          redirect_uris: [
+            process.env.OIDC_REDIRECT_URI ??
+              'http://localhost:3100/api/auth/callback',
+          ],
+          response_types: ['code'],
+        });
+        this.enabled = true;
+        return;
+      } catch {
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+        }
+      }
     }
+
+    // Local boot without IdP is allowed; login routes fail closed until IdP is up.
+    this.enabled = false;
+    this.client = null;
   }
 
   isEnabled(): boolean {
@@ -129,16 +136,31 @@ export class OidcService implements OnModuleInit {
       throw new UnauthorizedException('Missing subject');
     }
 
+    let email = typeof claims.email === 'string' ? claims.email : null;
+    let displayName =
+      typeof claims.name === 'string'
+        ? claims.name
+        : typeof claims.preferred_username === 'string'
+          ? claims.preferred_username
+          : null;
+
+    try {
+      const userinfo = await this.client.userinfo(tokenSet);
+      if (!email && typeof userinfo.email === 'string') {
+        email = userinfo.email;
+      }
+      if (!displayName && typeof userinfo.name === 'string') {
+        displayName = userinfo.name;
+      }
+    } catch {
+      // ID token claims alone are enough when userinfo is unavailable.
+    }
+
     return {
       issuer: claims.iss,
       subject: claims.sub,
-      email: typeof claims.email === 'string' ? claims.email : null,
-      displayName:
-        typeof claims.name === 'string'
-          ? claims.name
-          : typeof claims.preferred_username === 'string'
-            ? claims.preferred_username
-            : null,
+      email,
+      displayName,
     };
   }
 

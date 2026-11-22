@@ -2,20 +2,15 @@
 
 | Date | Area | Result | Notes |
 | --- | --- | --- | --- |
-| 2026-11-22 | `pnpm check` | PASS | lint, typecheck, restricted imports, 23 API tests |
-| 2026-11-22 | M1 health + home | PASS | `/health` ok; Playwright smoke on `:3100` |
-| 2026-11-22 | M2 RLS SQL/HTTP/concurrent | PASS | Cross-tenant 404; missing tenant context empty; WITH CHECK rejects |
-| 2026-11-22 | M3 refresh reuse | PASS | Unit test revokes family on reuse |
-| 2026-11-22 | M4 RBAC | PASS | Viewer/member 403; owner delete 200 |
-| 2026-11-22 | M5 Redis rate limit | PASS | Sliding window + fail-closed |
-| 2026-11-22 | M6 export idempotency | PASS | Same key returns same job; conditional claim once |
-| 2026-11-22 | M7 telemetry attrs | PASS | Rejects cookie/email/authorization |
-| 2026-11-22 | M8 terraform | PASS | `terraform fmt -check` + `validate` |
-| 2026-11-22 | M9 cookie secure | PASS | Production requires `COOKIE_SECURE=true` |
-| 2026-11-22 | IDE browser localhost | BLOCKED | Cursor browser could not reach host localhost; verified via curl + Playwright |
+| 2026-11-22 | `pnpm check` | PASS | lint, typecheck, restricted imports, API tests |
+| 2026-11-22 | M1–M9 automated | PASS | See prior rows in git history |
+| 2026-11-22 | Demo harness | PASS | `pnpm demo:up` (ElasticMQ + adobe/s3mock; MinIO Hub unavailable) |
+| 2026-11-22 | Playwright smoke | PASS | Home page |
+| 2026-11-22 | Playwright Alice OIDC | PASS | Login, Company A, cross-tenant project 404 |
+| 2026-11-22 | Playwright export | PASS | Idempotency key + worker completion + download URL |
 
 ## Known issues
 
-- Jest may force-exit because Redis clients opened in fail-closed tests keep handles.
-- Local default ports are **3100** (web) and **3101** (API) to avoid collisions with other apps on 3000/3001.
-- Full OIDC browser login against `apps/idp` was implemented but not exercised end-to-end in this run (IdP + Alice flow code is present).
+- Local ports: web **3100**, API **3101**, IdP **3102**
+- Local object storage uses `adobe/s3mock` (MinIO images were not pullable in this environment)
+- OTEL collector is `--profile otel` only (not required for demo e2e)

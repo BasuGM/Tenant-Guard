@@ -13,10 +13,16 @@
     "test": "RUN_DB_TESTS=true pnpm -r --filter=./packages/* --filter=./apps/api --filter=./apps/worker test",
     "test:e2e": "playwright test",
     "db:migrate": "pnpm --filter @tenantguard/db migrate",
+    "demo:seed": "tsx scripts/seed-demo.ts",
+    "demo:up": "bash scripts/demo-up.sh",
+    "demo:serve": "bash scripts/demo-serve.sh",
     "check": "pnpm lint && pnpm typecheck && node scripts/check-restricted-imports.mjs && pnpm test"
   },
   "devDependencies": {
     "@playwright/test": "^1.49.1",
+    "@types/pg": "^8.11.10",
+    "pg": "^8.13.1",
+    "tsx": "^4.19.2",
     "typescript": "^5.7.2"
   }
 }

@@ -11,6 +11,7 @@ const clients = [
     grant_types: ['authorization_code', 'refresh_token'],
     response_types: ['code'],
     token_endpoint_auth_method: 'client_secret_post',
+    scope: 'openid email profile offline_access',
   },
 ];
 
@@ -43,7 +44,7 @@ const configuration = {
   }),
 };
 
-const port = Number(process.env.IDP_PORT ?? 3002);
+const port = Number(process.env.IDP_PORT ?? 3102);
 const issuer = process.env.OIDC_ISSUER ?? `http://localhost:${port}`;
 
 const provider = new Provider(issuer, configuration);

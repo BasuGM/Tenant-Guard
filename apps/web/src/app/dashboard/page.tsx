@@ -57,11 +57,17 @@ export default function DashboardPage() {
   });
 
   const createTenant = useMutation({
-    mutationFn: () =>
-      api('/tenants', {
+    mutationFn: async () => {
+      const tenant = await api<{ id: string }>('/tenants', {
         method: 'POST',
         body: JSON.stringify({ name: tenantName, slug: tenantSlug }),
-      }),
+      });
+      await api('/auth/switch-tenant', {
+        method: 'POST',
+        body: JSON.stringify({ tenantId: tenant.id }),
+      });
+      return tenant;
+    },
     onSuccess: async () => {
       await queryClient.invalidateQueries();
     },

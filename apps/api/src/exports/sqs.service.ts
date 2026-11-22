@@ -32,16 +32,24 @@ export class SqsService {
     const carrier: Record<string, string> = {};
     propagation.inject(context.active(), carrier);
 
+    const messageAttributes: Record<
+      string,
+      { DataType: string; StringValue: string }
+    > = {};
+    if (carrier.traceparent) {
+      messageAttributes.traceparent = {
+        DataType: 'String',
+        StringValue: carrier.traceparent,
+      };
+    }
+
     await this.client.send(
       new SendMessageCommand({
         QueueUrl: this.queueUrl,
         MessageBody: JSON.stringify({ jobId, tenantId }),
-        MessageAttributes: {
-          traceparent: {
-            DataType: 'String',
-            StringValue: carrier.traceparent ?? '',
-          },
-        },
+        ...(Object.keys(messageAttributes).length
+          ? { MessageAttributes: messageAttributes }
+          : {}),
       }),
     );
   }

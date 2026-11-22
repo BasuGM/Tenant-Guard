@@ -27,7 +27,7 @@ export class OriginCheckMiddleware implements NestMiddleware {
       }
     }
 
-    const allowed = [webOrigin, `http://localhost:${process.env.API_PORT ?? 3001}`];
+    const allowed = [webOrigin, `http://localhost:${process.env.API_PORT ?? 3101}`];
     if (origin && !allowed.some((a) => origin === a)) {
       throw new ForbiddenException('Invalid origin');
     }

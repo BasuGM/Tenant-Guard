@@ -87,9 +87,21 @@ export class TenantsService {
           [tenantId, membership.rows[0]!.id, roleIds.get('owner')],
         );
 
-        return tenant.rows[0];
+        return tenant.rows[0]!;
       },
-    );
+    ).then(async (created) => {
+      await this.database.withClient(async (client) => {
+        await client.query(
+          `
+          UPDATE sessions
+          SET active_tenant_id = $1
+          WHERE user_id = $2 AND revoked_at IS NULL
+          `,
+          [created.id, userId],
+        );
+      });
+      return created;
+    });
   }
 
   async listForUser(userId: string) {
