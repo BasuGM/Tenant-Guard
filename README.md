@@ -1,21 +1,65 @@
 # TenantGuard
 
-Secure multi-tenant SaaS platform demonstrating OIDC + PKCE, refresh-token rotation, PostgreSQL Row-Level Security, RBAC, Redis sliding-window rate limiting, SQS exports with idempotency and a DLQ, Terraform, and OpenTelemetry.
+**Multi-tenant SaaS on a shared database — with isolation enforced where it actually matters.**
 
-## Documentation
+TenantGuard is a full-stack reference implementation of the hard parts of B2B SaaS: **PostgreSQL Row-Level Security**, **OIDC + PKCE** sessions with refresh-token rotation, **RBAC**, Redis rate limits, async **SQS** exports, OpenTelemetry, and Terraform for AWS.
 
-| Doc | Description |
+Built as a pnpm monorepo: **Next.js** dashboard, **NestJS** API, export **worker**, and a local **OIDC** IdP for demos.
+
+---
+
+## Why this exists
+
+Most “multi-tenant” demos stop at `WHERE tenant_id = ?` in application code. That fails when someone forgets a filter, uses the wrong DB role, or trusts a queue message.
+
+TenantGuard treats isolation as a **database invariant**:
+
+| Failure mode | What TenantGuard does |
 | --- | --- |
-| [docs/architecture.md](docs/architecture.md) | Isolation invariants (RLS, sessions, workers) |
-| [docs/tech-stack.md](docs/tech-stack.md) | Tech stack in detail (apps, DB, auth, queues, IaC) |
-| [docs/interview-guide.md](docs/interview-guide.md) | Interview prep: pitch, live demo, Q&A, resume bullets |
-| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestone status (M1–M9) |
-| [docs/VERIFICATION.md](docs/VERIFICATION.md) | Verification + interview demo checklist |
-| [docs/README.md](docs/README.md) | Full docs index |
+| Missing app filter | **FORCE RLS** on tenant tables; unset `app.tenant_id` fails closed |
+| Runtime as superuser | App connects as `tenantguard_app` (**NOBYPASSRLS**); boot refuses bypass roles |
+| Pooled connection leaks context | Per-request client + transaction-local `set_config` |
+| Cross-tenant probing | Foreign rows → **404** (not 403) |
+| Stolen refresh token replay | Tokens stored as **hashes**; reuse **revokes the family** |
+| Worker trusts SQS body | Queue is a wake-up; worker **claims** the DB row under RLS |
 
-## Quick start (recommended)
+If you are preparing for backend / platform interviews, start with the [interview guide](docs/interview-guide.md).
 
-You need **more than the web app**. The dashboard proxies to the API; without API + IdP you get `ECONNREFUSED` on `/api/auth/me`.
+---
+
+## Architecture
+
+```
+ Browser ──► Next.js (:3100) ── /api rewrite ──► NestJS (:3101)
+                                                    │
+                              Session → Permission → RateLimit
+                                                    │
+                                       tenant TX + Postgres RLS
+                                                    │
+ Local IdP (:3102) ◄── OIDC + PKCE ─────────────────┤
+                                                    │
+                                         SQS wake-up ▼
+                                              Export worker → S3
+```
+
+| Layer | Tech |
+| --- | --- |
+| Web | Next.js 15, React 19, TanStack Query (BFF cookies via rewrite) |
+| API | NestJS 11, Zod, openid-client, helmet |
+| Data | PostgreSQL 16, Drizzle schema/migrations, forced RLS |
+| Auth | OIDC authorization code + PKCE S256, HttpOnly cookies |
+| Limits | Redis 7 sliding window (Lua), fail closed |
+| Jobs | SQS (ElasticMQ locally), S3 (s3mock locally), idempotent exports |
+| Ops | OpenTelemetry (OTLP), Terraform (VPC, Aurora, Redis, SQS) |
+| Tests | Jest + Supertest, Playwright e2e |
+
+Full breakdown: [docs/tech-stack.md](docs/tech-stack.md) · invariants: [docs/architecture.md](docs/architecture.md)
+
+---
+
+## Quick start
+
+**Requirements:** Node ≥ 22, pnpm 9, Docker.
 
 ```bash
 cp .env.example .env
@@ -23,66 +67,134 @@ pnpm install
 pnpm app
 ```
 
-That starts Docker infra, IdP, API, web, and worker.
+`pnpm app` brings up Compose infra, IdP, API, web, and worker.
 
-- Web: http://localhost:3100  
-- API health: http://localhost:3101/health  
-- Sign in: use IdP user `alice` (any password)
+| What | Where |
+| --- | --- |
+| Dashboard | http://localhost:3100 |
+| API health | http://localhost:3101/health |
+| Sign in | IdP user **`alice`** — any password |
 
-### Manual (four terminals)
+> Running only the Next app is not enough. `/api` is proxied to Nest; without API + IdP you will see `ECONNREFUSED` on `/api/auth/me`.
+
+### Manual terminals (optional)
 
 ```bash
 pnpm demo:up
-export $(grep -v '^#' .env | xargs)
-pnpm --filter @tenantguard/idp dev      # terminal 1 — start first
-pnpm --filter @tenantguard/api dev      # terminal 2
-pnpm --filter @tenantguard/web dev      # terminal 3
-pnpm --filter @tenantguard/worker dev   # terminal 4 (needed for exports)
+# then, in separate shells (IdP first):
+pnpm --filter @tenantguard/idp dev
+pnpm --filter @tenantguard/api dev
+pnpm --filter @tenantguard/web dev
+pnpm --filter @tenantguard/worker dev   # required for CSV exports
 ```
 
-## Interview demo (full stack)
+---
 
-Proves Alice OIDC login, tenant isolation, and async CSV export. For what to *say* while demoing, see [docs/interview-guide.md](docs/interview-guide.md).
+## What you can do in the UI
+
+1. **Sign in** via the local IdP (OIDC + PKCE).
+2. **Create organizations** (tenants) and switch the active one.
+3. **Create projects** scoped to the active tenant.
+4. **Request a CSV export** — job goes pending → worker completes → download link.
+
+Under the hood you also get invitations/RBAC, audit-oriented permissions, rate limiting, and hashed API-key support from the M1–M9 roadmap.
+
+---
+
+## Prove it (interview / CI demo)
+
+Seeds a foreign tenant (**Company B**) you must not see, then runs Playwright.
 
 ```bash
-cp .env.example .env   # if needed
-pnpm install
-pnpm demo:up           # Postgres + Redis + ElasticMQ + S3 mock, migrate, seed Company B
-pnpm test:e2e          # starts IdP/API/web/worker via scripts/demo-serve.sh
+pnpm demo:up    # Postgres, Redis, ElasticMQ, S3 mock + migrate + seed
+pnpm test:e2e   # smoke + Alice login/isolation + export idempotency
 ```
 
-Manual walkthrough (optional):
+**Manual walkthrough**
 
-1. After `pnpm demo:up`, run `bash scripts/demo-serve.sh` (or start IdP → API → web → worker yourself)
-2. Open http://localhost:3100 → Sign in
-3. On the IdP, log in as `alice` (any password)
-4. Create organization **Company A**, then project **Project Alpha**
-5. Confirm the UI never shows **Company B Secret**
-6. Request a CSV export; job reaches `completed` and download works
+1. `pnpm demo:up` then `pnpm app` (or `pnpm demo:serve`)
+2. Open http://localhost:3100 → Sign in as `alice`
+3. Create **Company A** + **Project Alpha**
+4. Confirm **Company B Secret** never appears in the UI
+5. `GET /api/projects/<id-from-.demo/foreign-project-id>` → **404**
+6. Request CSV export → `completed` + download
 
-Playwright coverage: home smoke, Alice login + cross-tenant 404, export idempotency + completion.
+Talking track while you click: [docs/interview-guide.md](docs/interview-guide.md)  
+Expected outcomes: [docs/VERIFICATION.md](docs/VERIFICATION.md)
 
-## Scripts
+---
+
+## Repository layout
+
+```
+apps/
+  web/       Next.js dashboard (BFF)
+  api/       NestJS API
+  worker/    SQS export consumer
+  idp/       Local OIDC provider
+packages/
+  db/        Schema, migrations, withTenantTransaction
+  shared/    Zod schemas, permission matrix
+infra/
+  terraform/ AWS (VPC, Aurora, Redis, SQS, …)
+  local/     ElasticMQ / OTel / s3mock config
+e2e/         Playwright
+scripts/     demo:up, demo:serve, seed, pnpm app
+docs/        Architecture, stack, interview prep
+```
+
+---
+
+## Commands
 
 | Command | Purpose |
 | --- | --- |
-| `pnpm app` | Full local stack (infra + IdP + API + web + worker) |
-| `pnpm demo:up` | Compose `full`, migrate, seed Company B |
-| `pnpm demo:seed` | Seed/refresh Company B isolation fixture |
-| `pnpm demo:serve` | Start IdP/API/web/worker for demo/e2e |
-| `pnpm check` | lint, typecheck, unit/integration tests |
-| `pnpm test:e2e` | Playwright smoke / Alice / export |
+| `pnpm app` | One-command local stack |
+| `pnpm demo:up` | Compose `full` + migrate + seed Company B |
+| `pnpm demo:serve` | IdP + API + web + worker |
+| `pnpm demo:seed` | Refresh isolation fixture |
+| `pnpm check` | Lint, typecheck, restricted imports, unit/integration tests |
+| `pnpm test:e2e` | Playwright suites |
 | `pnpm db:migrate` | Apply SQL migrations |
 
-## Apps
+Optional Redis-only tests:
 
-- `apps/web` — Next.js dashboard (BFF rewrite to API)
-- `apps/api` — NestJS API
-- `apps/worker` — SQS export worker
-- `apps/idp` — local OIDC provider for development
+```bash
+docker compose --profile redis up -d redis
+RUN_REDIS_TESTS=true REDIS_URL=redis://localhost:6379 pnpm --filter @tenantguard/api test
+```
 
-## Stack snapshot
+---
 
-pnpm monorepo · NestJS · Next.js · PostgreSQL 16 + forced RLS · OIDC/PKCE · Redis · SQS/S3 · OpenTelemetry · Terraform (AWS) · Playwright
+## Ports
 
-Details: [docs/tech-stack.md](docs/tech-stack.md).
+| Service | Port |
+| --- | --- |
+| Web | 3100 |
+| API | 3101 |
+| IdP | 3102 |
+| Postgres | 5432 |
+| Redis | 6379 |
+| ElasticMQ | 9324 |
+| S3 mock | 9000 |
+
+Compose profiles: `redis`, `sqs`, `full`, `otel`.
+
+---
+
+## Documentation
+
+| Doc | When to open it |
+| --- | --- |
+| [Interview guide](docs/interview-guide.md) | Pitch, whiteboard, Q&A, resume bullets |
+| [Tech stack](docs/tech-stack.md) | Libraries and how pieces connect |
+| [Architecture](docs/architecture.md) | The 11 isolation invariants |
+| [Roadmap](docs/ROADMAP.md) | M1–M9 status |
+| [Verification](docs/VERIFICATION.md) | Checklist for demos and CI |
+| [Docs index](docs/README.md) | Everything else |
+
+---
+
+## License
+
+Private / portfolio project unless otherwise noted.
