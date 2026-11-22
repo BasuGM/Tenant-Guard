@@ -1,0 +1,16 @@
+node_modules
+dist
+.next
+.turbo
+coverage
+.env
+.env.local
+*.log
+.DS_Store
+playwright-report
+test-results
+.terraform
+*.tfstate
+*.tfstate.*
+infra/terraform/.terraform
+apps/web/tsconfig.tsbuildinfo

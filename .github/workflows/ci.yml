@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: tenantguard
+          POSTGRES_PASSWORD: tenantguard
+          POSTGRES_DB: tenantguard
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U tenantguard -d tenantguard"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    env:
+      DATABASE_URL: postgres://tenantguard:tenantguard@localhost:5432/tenantguard
+      DATABASE_APP_URL: postgres://tenantguard_app:tenantguard_app@localhost:5432/tenantguard
+      REDIS_URL: redis://localhost:6379
+      ALLOW_TEST_AUTH: "true"
+      NODE_ENV: test
+      COOKIE_SECURE: "false"
+      OTEL_SDK_DISABLED: "true"
+      RUN_DB_TESTS: "true"
+      RUN_REDIS_TESTS: "true"
+      WEB_ORIGIN: http://localhost:3100
+      API_PORT: "3101"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9.15.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install
+      - run: pnpm --filter @tenantguard/shared build
+      - run: pnpm --filter @tenantguard/db build
+      - run: pnpm db:migrate
+      - run: pnpm check
+      - name: Terraform fmt and validate
+        working-directory: infra/terraform
+        run: |
+          if command -v terraform >/dev/null 2>&1; then
+            terraform fmt -check
+            terraform init -backend=false
+            terraform validate
+          else
+            echo "terraform not installed in runner; skipping validate"
+          fi
