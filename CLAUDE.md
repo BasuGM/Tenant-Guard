@@ -19,7 +19,10 @@ RUN_REDIS_TESTS=true REDIS_URL=redis://localhost:6379 pnpm --filter @tenantguard
 
 ## Docs
 
+- Docs index: `docs/README.md`
 - Architecture invariants: `docs/architecture.md`
+- Tech stack: `docs/tech-stack.md`
+- Interview guide: `docs/interview-guide.md`
 - Roadmap status: `docs/ROADMAP.md`
 - Verification table: `docs/VERIFICATION.md`
 - QA log: `docs/QA_LOG.md`

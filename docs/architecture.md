@@ -48,3 +48,11 @@ pnpm --filter @tenantguard/web dev
 Default local ports: web `3100`, API `3101`, IdP `3102`.
 
 Optional profiles: `redis`, `sqs`, `otel`, or `full`.
+
+## See also
+
+- [tech-stack.md](tech-stack.md) — libraries, ports, and component responsibilities  
+- [interview-guide.md](interview-guide.md) — how to explain and demo these invariants  
+- [VERIFICATION.md](VERIFICATION.md) — expected results for checks and the interview demo  
+- [ROADMAP.md](ROADMAP.md) — milestone status  
+

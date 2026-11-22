@@ -1,5 +1,7 @@
 # Verification
 
+Interview talking track: [interview-guide.md](interview-guide.md). Stack reference: [tech-stack.md](tech-stack.md).
+
 | Step | Expected |
 | --- | --- |
 | `docker compose up -d postgres` | Healthy Postgres |

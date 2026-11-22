@@ -2,7 +2,16 @@
 
 Secure multi-tenant SaaS platform demonstrating OIDC + PKCE, refresh-token rotation, PostgreSQL Row-Level Security, RBAC, Redis sliding-window rate limiting, SQS exports with idempotency and a DLQ, Terraform, and OpenTelemetry.
 
-See [docs/architecture.md](docs/architecture.md) for isolation invariants.
+## Documentation
+
+| Doc | Description |
+| --- | --- |
+| [docs/architecture.md](docs/architecture.md) | Isolation invariants (RLS, sessions, workers) |
+| [docs/tech-stack.md](docs/tech-stack.md) | Tech stack in detail (apps, DB, auth, queues, IaC) |
+| [docs/interview-guide.md](docs/interview-guide.md) | Interview prep: pitch, live demo, Q&A, resume bullets |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | Milestone status (M1–M9) |
+| [docs/VERIFICATION.md](docs/VERIFICATION.md) | Verification + interview demo checklist |
+| [docs/README.md](docs/README.md) | Full docs index |
 
 ## Quick start (recommended)
 
@@ -33,7 +42,7 @@ pnpm --filter @tenantguard/worker dev   # terminal 4 (needed for exports)
 
 ## Interview demo (full stack)
 
-Proves Alice OIDC login, tenant isolation, and async CSV export.
+Proves Alice OIDC login, tenant isolation, and async CSV export. For what to *say* while demoing, see [docs/interview-guide.md](docs/interview-guide.md).
 
 ```bash
 cp .env.example .env   # if needed
@@ -57,8 +66,10 @@ Playwright coverage: home smoke, Alice login + cross-tenant 404, export idempote
 
 | Command | Purpose |
 | --- | --- |
+| `pnpm app` | Full local stack (infra + IdP + API + web + worker) |
 | `pnpm demo:up` | Compose `full`, migrate, seed Company B |
 | `pnpm demo:seed` | Seed/refresh Company B isolation fixture |
+| `pnpm demo:serve` | Start IdP/API/web/worker for demo/e2e |
 | `pnpm check` | lint, typecheck, unit/integration tests |
 | `pnpm test:e2e` | Playwright smoke / Alice / export |
 | `pnpm db:migrate` | Apply SQL migrations |
@@ -69,3 +80,9 @@ Playwright coverage: home smoke, Alice login + cross-tenant 404, export idempote
 - `apps/api` — NestJS API
 - `apps/worker` — SQS export worker
 - `apps/idp` — local OIDC provider for development
+
+## Stack snapshot
+
+pnpm monorepo · NestJS · Next.js · PostgreSQL 16 + forced RLS · OIDC/PKCE · Redis · SQS/S3 · OpenTelemetry · Terraform (AWS) · Playwright
+
+Details: [docs/tech-stack.md](docs/tech-stack.md).
